@@ -348,21 +348,54 @@ def test_admin_get_user():
     conn = boto3.client("cognito-idp", "us-west-2")
 
     username = str(uuid.uuid4())
-    value = str(uuid.uuid4())
     user_pool_id = conn.create_user_pool(PoolName=str(uuid.uuid4()))["UserPool"]["Id"]
+    # Testing user with no custom attributes
+    conn.admin_create_user(
+        UserPoolId=user_pool_id,
+        Username=username
+    )
+    result = conn.admin_get_user(
+        UserPoolId=user_pool_id,
+        Username=username
+    )
+    result["UserAttributes"].should.have.length_of(2)
+    list(filter(
+        lambda attr: attr["Name"] == "email" and attr["Value"] == username,
+        result["UserAttributes"]
+    )).should.have.length_of(1)
+
+    # Testing user with custom attributes
+    username = str(uuid.uuid4())
+    value = str(uuid.uuid4())
+
     conn.admin_create_user(
         UserPoolId=user_pool_id,
         Username=username,
         UserAttributes=[
             {"Name": "thing", "Value": value}
-        ],
+        ]
     )
 
     result = conn.admin_get_user(UserPoolId=user_pool_id, Username=username)
-    result["Username"].should.equal(username)
-    result["UserAttributes"].should.have.length_of(1)
-    result["UserAttributes"][0]["Name"].should.equal("thing")
-    result["UserAttributes"][0]["Value"].should.equal(value)
+    # Custom attribute + sub + email
+    result["UserAttributes"].should.have.length_of(3)
+    # TODO change this tests in order to pass
+    list(filter(
+        lambda attr: attr["Name"] == "thing" and attr["Value"] == value,
+        result["UserAttributes"]
+    )).should.have.length_of(1)
+    list(filter(
+        lambda attr: attr["Name"] == "email" and attr["Value"] == username,
+        result["UserAttributes"]
+    )).should.have.length_of(1)
+
+    # This field, in boto3, contains the user's sub
+    user_sub = result["Username"]
+    result_by_sub = conn.admin_get_user(
+        UserPoolId=user_pool_id, Username=user_sub
+    )
+
+    result_by_sub.should_not.be.empty
 
 
 @mock_cognitoidp
@@ -537,3 +570,7 @@ def test_confirm_forgot_password():
         ConfirmationCode=str(uuid.uuid4()),
         Password=str(uuid.uuid4()),
     )
+
+
+if __name__ == '__main__':
+    test_admin_get_user()

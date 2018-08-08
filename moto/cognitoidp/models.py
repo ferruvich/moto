@@ -59,11 +59,12 @@ class CognitoIdpUserPool(BaseModel):
 
         return user_pool_json
 
+    # TODO change it in order to accept user's email, phone or sub
     def create_jwt(self, client_id, username, expires_in=60 * 60, extra_data={}):
         now = int(time.time())
         payload = {
             "iss": "https://cognito-idp.{}.amazonaws.com/{}".format(self.region, self.id),
-            "sub": self.users[username].id,
+            "sub": self.users[username].username,
             "aud": client_id,
             "token_use": "id",
             "auth_time": now,
@@ -166,15 +167,24 @@ class CognitoIdpIdentityProvider(BaseModel):
 class CognitoIdpUser(BaseModel):
 
     def __init__(self, user_pool_id, username, password, status, attributes):
-        self.id = str(uuid.uuid4())
+        # This is actually the user's sub. In boto3, it is displayed as
+        # Username and 'sub' in UserAttributes
+        self.username = str(uuid.uuid4())
         self.user_pool_id = user_pool_id
-        self.username = username
         self.password = password
         self.status = status
         self.enabled = True
-        self.attributes = attributes
         self.create_date = datetime.datetime.utcnow()
         self.last_modified_date = datetime.datetime.utcnow()
+
+        attributes.extend([{
+            'Name': 'email',
+            'Value': username
+        }, {
+            'Name': 'sub',
+            'Value': self.username
+        }])
+        self.attributes = attributes
 
     def _base_json(self):
         return {
@@ -352,15 +362,21 @@ class CognitoIdpBackend(BaseBackend):
             raise ResourceNotFoundError(user_pool_id)
 
         user = CognitoIdpUser(user_pool_id, username, temporary_password, UserStatus["FORCE_CHANGE_PASSWORD"], attributes)
-        user_pool.users[user.username] = user
+        user_pool.users[username] = user
         return user
 
+    # TODO change it in order to accept user's email, phone or sub
     def admin_get_user(self, user_pool_id, username):
         user_pool = self.user_pools.get(user_pool_id)
         if not user_pool:
             raise ResourceNotFoundError(user_pool_id)
 
         if username not in user_pool.users:
+            users_matching_id = list(
+                filter(lambda user: user.username == username, user_pool.users.values())
+            )
+            if len(users_matching_id) > 0:
+                return users_matching_id[0]
             raise ResourceNotFoundError(username)
 
         return user_pool.users[username]
@@ -372,6 +388,7 @@ class CognitoIdpBackend(BaseBackend):
 
         return user_pool.users.values()
 
+    # TODO change it in order to accept user's email, phone or sub
     def admin_delete_user(self, user_pool_id, username):
         user_pool = self.user_pools.get(user_pool_id)
         if not user_pool:
@@ -463,6 +480,7 @@ class CognitoIdpBackend(BaseBackend):
         else:
             return {}
 
+    # TODO change it in order to accept user's email, phone or sub
     def confirm_forgot_password(self, client_id, username, password):
         for user_pool in self.user_pools.values():
             if client_id in user_pool.clients and username in user_pool.users:
