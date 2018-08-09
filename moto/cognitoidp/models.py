@@ -63,7 +63,7 @@ class CognitoIdpUserPool(BaseModel):
         now = int(time.time())
         payload = {
             "iss": "https://cognito-idp.{}.amazonaws.com/{}".format(self.region, self.id),
-            "sub": self.users[username].username,
+            "sub": self.users[username].sub,
             "aud": client_id,
             "token_use": "id",
             "auth_time": now,
@@ -169,7 +169,7 @@ class CognitoIdpUser(BaseModel):
                  password, status, attributes):
         # This is actually the user's sub. In boto3, it is displayed as
         # Username and 'sub' in UserAttributes
-        self.username = str(uuid.uuid4())
+        self.sub = str(uuid.uuid4())
         self.user_pool_id = user_pool_id
         self.password = password
         self.status = status
@@ -182,14 +182,14 @@ class CognitoIdpUser(BaseModel):
             'Value': username
         }, {
             'Name': 'sub',
-            'Value': self.username
+            'Value': self.sub
         }])
         self.attributes = attributes
 
     def _base_json(self):
         return {
             "UserPoolId": self.user_pool_id,
-            "Username": self.username,
+            "Username": self.sub,
             "UserStatus": self.status,
             "UserCreateDate": time.mktime(self.create_date.timetuple()),
             "UserLastModifiedDate": time.mktime(self.last_modified_date.timetuple()),
@@ -372,15 +372,15 @@ class CognitoIdpBackend(BaseBackend):
         user_pool.users[username] = user
         return user
 
-    # TODO change it in order to accept user's email, phone or sub
     def admin_get_user(self, user_pool_id, username):
         user_pool = self.user_pools.get(user_pool_id)
         if not user_pool:
             raise ResourceNotFoundError(user_pool_id)
 
         if username not in user_pool.users:
+            # User sub is passed
             users_matching_id = list(
-                filter(lambda user: user.username == username, user_pool.users.values())
+                filter(lambda user: user.sub == username, user_pool.users.values())
             )
             if len(users_matching_id) > 0:
                 return users_matching_id[0]
