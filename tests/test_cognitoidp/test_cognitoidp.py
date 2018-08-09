@@ -570,7 +570,3 @@ def test_confirm_forgot_password():
         ConfirmationCode=str(uuid.uuid4()),
         Password=str(uuid.uuid4()),
     )
-
-
-if __name__ == '__main__':
-    test_admin_get_user()

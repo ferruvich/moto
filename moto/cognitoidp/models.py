@@ -59,7 +59,6 @@ class CognitoIdpUserPool(BaseModel):
 
         return user_pool_json
 
-    # TODO change it in order to accept user's email, phone or sub
     def create_jwt(self, client_id, username, expires_in=60 * 60, extra_data={}):
         now = int(time.time())
         payload = {
@@ -166,7 +165,8 @@ class CognitoIdpIdentityProvider(BaseModel):
 
 class CognitoIdpUser(BaseModel):
 
-    def __init__(self, user_pool_id, username, password, status, attributes):
+    def __init__(self, user_pool_id, username, username_field,
+                 password, status, attributes):
         # This is actually the user's sub. In boto3, it is displayed as
         # Username and 'sub' in UserAttributes
         self.username = str(uuid.uuid4())
@@ -178,7 +178,7 @@ class CognitoIdpUser(BaseModel):
         self.last_modified_date = datetime.datetime.utcnow()
 
         attributes.extend([{
-            'Name': 'email',
+            'Name': username_field,
             'Value': username
         }, {
             'Name': 'sub',
@@ -361,7 +361,14 @@ class CognitoIdpBackend(BaseBackend):
         if not user_pool:
             raise ResourceNotFoundError(user_pool_id)
 
-        user = CognitoIdpUser(user_pool_id, username, temporary_password, UserStatus["FORCE_CHANGE_PASSWORD"], attributes)
+        # This should be an empty array or an array of length 1
+        username_attrs = user_pool.extended_config.get("UsernameAttributes", [])
+        username_attribute = 'email'
+        if len(username_attrs) > 0:
+            username_attribute = username_attrs[0]
+
+        user = CognitoIdpUser(user_pool_id, username, username_attribute,
+                              temporary_password, UserStatus["FORCE_CHANGE_PASSWORD"], attributes)
         user_pool.users[username] = user
         return user
 
