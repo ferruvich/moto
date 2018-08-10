@@ -402,6 +402,28 @@ class CognitoIdpBackend(BaseBackend):
             raise ResourceNotFoundError(user_pool_id)
 
         if username not in user_pool.users:
+            # User sub is passed, this list should be empty
+            # or with only one element since subs are unique
+            users_matching_id = [
+                user for user in user_pool.users.values()
+                if user.sub == username
+            ]
+            if len(users_matching_id) > 0:
+                username_attributes = user_pool.extended_config.get(
+                    "UsernameAttributes", []
+                )
+                username_attribute = 'email'
+                if len(username_attributes) > 0:
+                    username_attribute = username_attributes[0]
+
+                user = users_matching_id[0]
+                user_attr = [
+                    attr["Value"] for attr in user.attributes
+                    if attr["Name"] == username_attribute
+                ][0]
+                del user_pool.users[user_attr]
+                return
+
             raise ResourceNotFoundError(username)
 
         del user_pool.users[username]

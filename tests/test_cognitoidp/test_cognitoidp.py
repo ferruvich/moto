@@ -336,9 +336,8 @@ def test_admin_create_user():
         ],
     )
 
-    result["User"]["Username"].should.equal(username)
     result["User"]["UserStatus"].should.equal("FORCE_CHANGE_PASSWORD")
-    result["User"]["Attributes"].should.have.length_of(1)
+    result["User"]["Attributes"].should.have.length_of(3)
     result["User"]["Attributes"][0]["Name"].should.equal("thing")
     result["User"]["Attributes"][0]["Value"].should.equal(value)
 
@@ -407,7 +406,27 @@ def test_list_users():
     conn.admin_create_user(UserPoolId=user_pool_id, Username=username)
     result = conn.list_users(UserPoolId=user_pool_id)
     result["Users"].should.have.length_of(1)
-    result["Users"][0]["Username"].should.equal(username)
+    list(
+        filter(
+            lambda res: {'Name': 'email', 'Value': username} in res,
+            [user.get("Attributes", []) for user in result["Users"]]
+        )
+    ).should.have.length_of(1)
+
+    user_pool_id = \
+    conn.create_user_pool(
+        PoolName=str(uuid.uuid4()),
+        UsernameAttributes=['phone_number']
+    )["UserPool"]["Id"]
+    conn.admin_create_user(UserPoolId=user_pool_id, Username=username)
+    result = conn.list_users(UserPoolId=user_pool_id)
+    result["Users"].should.have.length_of(1)
+    list(
+        filter(
+            lambda res: {'Name': 'phone_number', 'Value': username} in res,
+            [user.get("Attributes", []) for user in result["Users"]]
+        )
+    ).should.have.length_of(1)
 
 
 @mock_cognitoidp
@@ -418,6 +437,17 @@ def test_admin_delete_user():
     user_pool_id = conn.create_user_pool(PoolName=str(uuid.uuid4()))["UserPool"]["Id"]
     conn.admin_create_user(UserPoolId=user_pool_id, Username=username)
     conn.admin_delete_user(UserPoolId=user_pool_id, Username=username)
+
+    caught = False
+    try:
+        conn.admin_get_user(UserPoolId=user_pool_id, Username=username)
+    except conn.exceptions.ResourceNotFoundException:
+        caught = True
+
+    caught.should.be.true
+
+    user = conn.admin_create_user(UserPoolId=user_pool_id, Username=username)
+    conn.admin_delete_user(UserPoolId=user_pool_id, Username=user["User"]["Username"])
 
     caught = False
     try:
